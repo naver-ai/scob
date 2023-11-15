@@ -1,0 +1,119 @@
+phase: finetuning
+exp_name: cord_donutkie
+workspace_name: ./experiments
+
+dataset_items:
+  # Donut KIE > donut_cord
+ - name: donut_cord
+   dataset_root_path: donut_cord
+   dataset_label: null
+   tasks:
+     - name: donut_kie
+       batch_ratio: 1.0
+       decoder: transformer_decoder__0
+       loss_weight: 1.0
+       use_anno: False
+       transforms_dict: custom_default
+
+
+test_only: False
+
+model:
+  img_width: 1920
+  img_height: 1920
+  
+  dove_pretrained_model_path: pretrained_models/w/scob_ocrread_1m_intermediate_textread_50k.pt
+
+  encoder:
+    encoder_model_name: swin_transformer
+    encoder_model_weight_path: ./pretrained_models/timm/swin_base_patch4_window12_384/swin_base_patch4_window12_384_22kto1k.pth
+
+    swin_transformer:
+      img_size: 1920
+      patch_size: 4
+      in_chans: 3
+      embed_dim: 128
+      depths: [2, 2, 18, 2]
+      num_heads: [4, 8, 16, 32]
+      window_size: 12
+
+  decoders:
+    transformer_decoder__0: # Auto-regressive decoder
+      type: transformer_decoder
+      huggingface_path: ./pretrained_models/huggingface
+      kwargs:
+        tokenizer_name: char_en__bert-base-cased # char_en__bert-base-cased # bert-base-cased
+        tokenizer_path: null
+        decoder_model_name: bert-base-cased  # model_name of huggingface transformers
+        pe_type: absolute  # absolute, relative_key, relative_key_query
+        decoder_max_length: 448
+        n_prune_layers: 0
+        prune_layer_position: upper  # lower, upper
+        n_loc_head_hidden_layers: 2
+
+      head_type: base  # base, 2head
+      calc_val_loss: False
+      calc_confidence: False
+      aux_loss: True
+      loss_func:
+        name: ce  # l1, mse, ce, focal
+      loc_loss_2head_func:
+        name: l1  # l1, mse
+      token_loss_weight: 1.0
+      loc_loss_weight: 5.0
+      otor_blur_ratio: 0.2
+      scob:
+        use: False
+        project_dim: 128
+        loss_weight: 0.5
+
+train:
+  batch_size: 4
+  num_samples_per_epoch: 40
+  max_epochs: 200
+  use_fp16: True
+  num_nodes: 1
+  accelerator: gpu
+  strategy:
+    type: deepspeed  # ddp, ddp_sharded, deepspeed, etc.
+    ddp_kwargs: # use plugin's keyword argument key-value pairs
+      # -- ddp options
+      # -- https://pytorch-lightning.readthedocs.io/en/latest/api/pytorch_lightning.plugins.training_type.DDPPlugin.html#pytorch_lightning.plugins.training_type.DDPPlugin
+      find_unused_parameters: False  # Use False unless you definitely need it
+      gradient_as_bucket_view: False  # PL default value is False
+    deepspeed_kwargs:
+      # -- deepspeed by Microsoft
+      # --  https://pytorch-lightning.readthedocs.io/en/latest/api/pytorch_lightning.plugins.training_type.DeepSpeedPlugin.html#pytorch_lightning.plugins.training_type.DeepSpeedPlugin
+      stage: 2
+
+  save_best: True
+  save_epoch_last: True
+ 
+  clip_gradient_algorithm: norm
+  clip_gradient_value: 1.0
+  num_workers: -1 # all workers (not per-gpu workers) and -1 means all cpu cores
+
+  optimizer:
+    method: adam
+    params:
+      lr: 3e-5
+    lr_schedule:
+      method: cosine
+      params:
+        warmup_steps: 20_000 # in steps
+
+  log_interval: 10  # in steps
+  val_interval: 1  # in epochs
+
+  profiler:
+    method: null      # simple, advanced, pytorch
+
+val:
+  batch_size: 16
+  num_workers: -1  # -1 means "system checks the number of cpu and use it".
+  limit_val_batches: 16
+
+test:
+  batch_size: 16
+  num_workers: -1  # -1 means "system checks the number of cpu and use it".
+  limit_test_batches: 16

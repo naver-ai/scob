@@ -1,0 +1,30 @@
+opencv-python-headless==4.5.2.54
+numpy>=1.20.0, <1.22
+pytorch-lightning==1.5.6
+six
+omegaconf
+overrides==4.1.2
+lmdb
+timm==0.4.12
+deepspeed==0.5.10
+tensorboard>=2.2.0
+albumentations==1.1.0
+transformers==4.11.3
+asian_bart
+python-Levenshtein
+zss
+editdistance
+einops
+
+# focal loss
+kornia
+
+# evaluation
+natsort
+shapely
+polygon3
+scipy
+apted
+distance
+lxml
+cleval

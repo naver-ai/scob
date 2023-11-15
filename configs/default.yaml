@@ -1,0 +1,403 @@
+# "finetuning", "pretraining"
+phase: null
+
+# For workspace name
+# The checkpoint file location to be saved: {workspace_name}/checkpoints/{exp_name}/
+# The log file location to be saved: {workspace_name}/logs/tensorboard/logs/{exp_name}/
+workspace_name: ./experiments
+exp_name: test
+
+# root of data file-system.
+data_root_path: ./datasets
+
+# Debug mode for data loader.
+# If True, set num_workers in data loader to 0 (the data will be loaded in the main process).
+debug: False
+
+# pytest mode. This restricts gpu memory per process.
+# Also, datapoints are restricted in jsonl reader for faster inference.
+is_pytest: False
+
+# tcp_store_ip must be a proper hostname/ip rather than localhost/127.0.0.1 for multinode training.
+tcp_store_ip: 127.0.0.1
+tcp_store_port: 63000
+
+# Datasets
+# If you want to include the new dataset in training, you should need to add it here.
+# Each dataset has the following values:
+# - name: dataset name
+# - dataset_root_path: dataset path
+# - dataset_label: dataset_label which indicates preprocessed version
+# - tasks: tasks to solve in this dataset
+#   - name: task name (E.g. ocr_read(_2head), classification, kie, ...).
+#   - batch_ratio: the probability that this dataset - task will be sampled.
+#   - decoder: the name of decoder to perform this task.
+#   - loss_weight: the loss weight by which the examples in this dataset - task are multiplied.
+#   - use_anno: Whether to use annotation.lmdb when getting gt sequence
+#   - transforms_dict: dictionary which contains image load type, transforms list, image normalize type
+dataset_items:
+# E2E OCR
+  - name: icdar2013
+    dataset_root_path: datasets/icdar2013
+    dataset_label: null
+    tasks:
+      - name: ocr_read
+        batch_ratio: 1.0
+        decoder: transformer_decoder__1
+        loss_weight: 1.0
+        use_anno: True
+        transforms_dict: custom_ocr
+
+# DONUT KIE
+  - name: donut_sroie
+    dataset_root_path: dove/datasets/donut_sroie
+    dataset_label: null
+    tasks:
+      - name: donut_kie
+        batch_ratio: 1.0
+        decoder: transformer_decoder__0
+        loss_weight: 1.0
+        use_anno: False
+        transforms_dict: custom_default
+  - name: donut_cord
+    dataset_root_path: dove/datasets/donut_cord
+    dataset_label: null
+    tasks:
+      - name: donut_kie
+        batch_ratio: 1.0
+        decoder: transformer_decoder__0
+        loss_weight: 1.0
+        use_anno: False
+        transforms_dict: custom_default
+  - name: donut_businesscardjpn
+    dataset_root_path: dove/datasets/donut_businesscardjpn
+    dataset_label: null
+    tasks:
+      - name: donut_kie
+        batch_ratio: 1.0
+        decoder: transformer_decoder__0
+        loss_weight: 1.0
+        use_anno: False
+        transforms_dict: custom_default
+  - name: donut_receiptkor
+    dataset_root_path: dove/datasets/donut_receiptkor
+    dataset_label: null
+    tasks:
+      - name: donut_kie
+        batch_ratio: 1.0
+        decoder: transformer_decoder__0
+        loss_weight: 1.0
+        use_anno: False
+        transforms_dict: custom_default
+
+# Table parsing
+  - name: pubtabnet
+    dataset_root_path: dove/datasets/pubtabnet
+    dataset_label: null
+    tasks:
+      - name: table_parsing
+        batch_ratio: 1.0
+        decoder: transformer_decoder__0
+        loss_weight: 1.0
+        use_anno: False
+        transforms_dict: custom_default
+
+
+# custom_tranforms_dict which can be used in individual dtd items
+custom_transforms_dict:
+  custom_default:
+    img_load_type: cv2
+    train:
+      - name: Resize
+        params:
+          interpolation: linear
+    valtest:
+      - name: Resize
+        params:
+          interpolation: linear
+    image_normalize: imagenet_default
+
+  custom_default_pillow:
+    img_load_type: pillow
+    train:
+      - name: ResizeTwoPic
+        params:
+          interps: [bilinear]
+    valtest:
+      - name: ResizeTwoPic
+        params:
+          interps: [bilinear]
+    image_normalize: imagenet_default
+
+  custom_ocr:
+    img_load_type: cv2
+    train:
+      - name: RandomRotate
+        params:
+          prob: 0.3333
+          rot_range: [-45.0, 45.0]
+      - name: CraftRandomCrop
+        params:
+          crop_aspect_ratio: [0.33333, 3.0]
+          attempts: 50
+          num_box_thresholds: [1]
+          iou_threshold: 0.9
+          crop_scale: [0.1, 1.0]
+      - name: Resize
+        params:
+          interpolation: random
+      - name: PhotometricDistort
+        params:
+          prob: 0.5
+    valtest:  # Choose one of them, Resize and KeepAspectRatioBilinearResize
+      - name: Resize
+        params:
+          interpolation: linear
+      #- name: KeepAspectRatioBilinearResize
+      #  params: null
+    otor_origin:
+      - name: Resize
+        params:
+          interpolation: linear
+      - name: Otor_OriginDistort
+        params:
+          prob: 0.5
+    image_normalize: imagenet_default
+
+  moco_custom_ocr:
+    img_load_type: cv2
+    train:
+      - name: RandomRotate
+        params:
+          prob: 0.3333
+          rot_range: [-45.0, 45.0]
+      - name: CraftRandomCrop
+        params:
+          crop_aspect_ratio: [0.33333, 3.0]
+          attempts: 50
+          num_box_thresholds: [1]
+          iou_threshold: 0.9
+          crop_scale: [0.1, 1.0]
+      - name: ResizeMultiview
+        params:
+          interpolation: random
+      - name: MoCo_PhotometricDistort
+        params:
+          prob: 1.0 # default not controllable
+    valtest:
+      - name: ResizeMultiview
+        params:
+          interpolation: linear
+    image_normalize: imagenet_default
+
+
+    
+
+# Evaluation mode
+test_only: False
+
+reproduce:
+  seed: -1
+  cudnn_deterministic: False
+  cudnn_benchmark: True
+
+# Model architecture
+model:
+  img_width: 224
+  img_height: 224
+
+  resume_model_path: null  # relative path from "workspace" or absolute path
+  w_pretrained_model_path: null  # relative path from data_root or absolute path
+
+  encoder:
+    encoder_model_name: vision_transformer
+    encoder_model_weight_path: null
+
+    vision_transformer:  # based on vit_base_patch16_224
+      img_size: 224
+      patch_size: 16
+      in_chans: 3
+      embed_dim: 768
+      depth: 12
+      num_heads: 12
+
+    #vision_transformer_hybrid:
+    #  resnetv2_layers: []
+    #  img_size: 384
+    #  raw_patch_size: 16
+    #  patch_size: 8
+    #  in_chans: 3
+    #  embed_dim: 192
+    #  depth: 12
+    #  num_heads: 3
+
+    #vision_transformer_hybrid:
+    #  resnetv2_layers: [2, 2, 2, 2]
+    #  img_size: 384
+    #  raw_patch_size: 32
+    #  patch_size: 1
+    #  in_chans: 3
+    #  embed_dim: 384
+    #  depth: 12
+    #  num_heads: 6
+
+    vision_transformer_hybrid:
+      resnetv2_layers: [3, 4, 9]
+      img_size: 224
+      raw_patch_size: 16
+      patch_size: 1
+      in_chans: 3
+      embed_dim: 768
+      depth: 12
+      num_heads: 12
+
+    swin_transformer:
+      img_size: 224
+      patch_size: 4
+      in_chans: 3
+      embed_dim: 128
+      depths: [2, 2, 18, 2]
+      num_heads: [4, 8, 16, 32]
+
+    swin_transformer_fpn:
+      img_size: 224
+      patch_size: 4
+      in_chans: 3
+      embed_dim: 128
+      depths: [2, 2, 18, 2]
+      num_heads: [4, 8, 16, 32]
+      out_channels: 256
+
+  # Configuration for all decoders to be used in the experiment.
+  decoders:
+    transformer_decoder__0:  # Auto-regressive decoder
+      type: transformer_decoder
+      huggingface_path: null
+      kwargs:
+        # bert-base-cased, roberta-base, facebook/bart-base, bert-base-multilingual-cased
+        # xlm-roberta-base, facebook/mbart-large-cc25, hyunwoongko/asian-bart-ecjk
+        # char_en__bert-base-cased
+        tokenizer_name: bert-base-multilingual-cased
+
+        # if specified, use this path, instead of w_pretrained_path's one
+        # relative path from data-root or absolute path
+        tokenizer_path: null
+
+        # model_name of huggingface transformers
+        # Same as tokenizer_name in most cases
+        # If tokenizer_name is char_en__bert-base-cased, set decoder_model_name as bert-base-cased
+        decoder_model_name: bert-base-multilingual-cased
+        pe_type: absolute  # absolute, relative_key, relative_key_query
+        decoder_max_length: 32
+        n_prune_layers: 9
+        prune_layer_position: upper  # lower, upper
+        n_loc_head_hidden_layers: 0
+
+      head_type: base  # base, 2head
+      calc_val_loss: False
+      calc_confidence: False
+      loss_func:
+        name: ce  # l1, mse, ce, focal
+      aux_loss: False
+      loc_loss_2head_func:
+        name: l1  # l1, mse
+      token_loss_weight: 1.0
+      loc_loss_weight: 1.0
+
+    transformer_decoder__1: # Auto-regressive decoder
+      type: transformer_decoder
+      huggingface_path: dove/hugging_face_models
+      kwargs:
+        tokenizer_name: bert-base-cased
+        tokenizer_path: null  # if specified, use this path, instead of w_pretrained_path's one
+        decoder_model_name: bert-base-cased
+        pe_type: absolute  # absolute, relative_key, relative_key_query
+        decoder_max_length: 64
+        n_prune_layers: 10
+        prune_layer_position: upper  # lower, upper
+        n_loc_head_hidden_layers: 0
+
+      head_type: 2head  # base, 2head
+      calc_val_loss: True
+      calc_confidence: False
+      loss_func:
+        name: focal  # l1, mse, ce, focal
+        focal_alpha: 0.25
+        focal_gamma: 2
+      aux_loss: False
+      loc_loss_2head_func:
+        name: l1  # l1, mse
+      token_loss_weight: 1.0
+      loc_loss_weight: 1.0
+
+  weight_init: gaussian
+
+# Hyper-parameter
+train:
+  batch_size: 4
+  num_samples_per_epoch: 40
+  accumulate_grad_batches: 1
+  max_epochs: 1
+  use_fp16: True
+  accelerator: gpu
+  num_nodes: 1
+  strategy:
+    type: ddp  # ddp, ddp_sharded, deepspeed, etc.
+    ddp_kwargs: # use plugin's keyword argument key-value pairs
+      # -- ddp options
+      # -- https://pytorch-lightning.readthedocs.io/en/latest/api/pytorch_lightning.plugins.training_type.DDPPlugin.html#pytorch_lightning.plugins.training_type.DDPPlugin
+      find_unused_parameters: False  # Use False unless you definitely need it
+      gradient_as_bucket_view: False  # PL default value is False
+    deepspeed_kwargs:
+      # -- deepspeed by Microsoft
+      # --  https://pytorch-lightning.readthedocs.io/en/latest/api/pytorch_lightning.plugins.training_type.DeepSpeedPlugin.html#pytorch_lightning.plugins.training_type.DeepSpeedPlugin
+      stage: 2
+  save_best: True
+  save_epoch_last: False
+
+  clip_gradient_algorithm: norm
+  clip_gradient_value: 1.0
+  num_workers: 0 # all workers (not per-gpu workers) and -1 means all cpu cores
+
+  optimizer:
+    method: adam
+    params:
+      lr: 5e-5
+      eps: 1e-6
+    lr_schedule:
+      method: cosine
+      params:
+        warmup_steps: 1000 # in steps
+
+  log_interval: 5 # in steps
+  val_interval: 10 # in epochs
+
+  profiler:
+    method: null      # simple, advanced, pytorch
+
+val:
+  batch_size: 4
+  num_workers: 0  # -1 means "system checks the number of cpu and use it".
+  limit_val_batches: 1.0
+
+test:
+  batch_size: 4
+  num_workers: 0  # -1 means "system checks the number of cpu and use it".
+  limit_test_batches: 1.0
+
+# for convinience (only used for evaluate.py)
+eval:
+  batch_size: 4
+  num_workers: 0  # -1 means "system checks the number of cpu and use it".
+  limit_eval_batches: -1  # int
+  dataset_name: null
+  task_name: null
+  decoder_name: null
+  dataset_split: null
+  dataset_label: null
+  use_anno: null
+  transforms_dict: null
+
+logging:
+  tensorboard:
+    log_root_dir: logs/tensorboard/logs

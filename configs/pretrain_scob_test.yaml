@@ -1,0 +1,116 @@
+phase: pretraining
+exp_name: scob_test
+workspace_name: experiments/
+
+dataset_items:
+  - name: icdar2013
+    dataset_root_path: icdar2013
+    dataset_label: null
+    tasks:
+      - name: otor
+        batch_ratio: 0.01
+        decoder: transformer_decoder__0
+        loss_weight: 1.0
+        use_anno: True
+        transforms_dict: custom_ocr
+
+
+test_only: False
+
+model:
+  img_width: 768
+  img_height: 768
+
+  w_pretrained_model_path: null
+
+  encoder:
+    encoder_model_name: swin_transformer
+    encoder_model_weight_path: ./pretrained_models/timm/swin_base_patch4_window12_384/swin_base_patch4_window12_384_22kto1k.pth
+
+    swin_transformer:
+      img_size: 768
+      patch_size: 4
+      in_chans: 3
+      embed_dim: 128
+      depths: [2, 2, 18, 2]
+      num_heads: [4, 8, 16, 32]
+
+  decoders:
+    transformer_decoder__0:  # Auto-regressive decoder
+      type: transformer_decoder
+      huggingface_path: ./pretrained_models/huggingface
+      kwargs:
+        tokenizer_name: char_en__bert-base-cased
+        tokenizer_path: null  # if specified, use this path, instead of _pretrained_path's one
+        decoder_model_name: bert-base-cased
+        pe_type: absolute  # absolute, relative_key, relative_key_query
+        decoder_max_length: 512
+        n_prune_layers: 0
+        prune_layer_position: upper  # lower, upper
+        n_loc_head_hidden_layers: 2
+
+      calc_val_loss: False
+      calc_confidence: False
+      head_type: base  # base, 2head
+      loss_func:
+        name: ce  # l1, mse, ce, focal
+      aux_loss: False
+      loc_loss_2head_func:
+        name: l1  # l1, mse
+      token_loss_weight: 1.0
+      loc_loss_weight: 5.0
+      otor_blur_ratio: 0.2
+      scob:
+        use: True
+        project_dim: 128
+        loss_weight: 0.5
+
+
+train:
+  batch_size: 4
+  num_samples_per_epoch: 40
+  max_epochs: 10
+  accumulate_grad_batches: 1
+
+  use_fp16: True
+  accelerator: gpu
+  strategy:
+    type: deepspeed  # ddp, ddp_sharded, deepspeed, etc.
+    ddp_kwargs: # use plugin's keyword argument key-value pairs
+      find_unused_parameters: False  # Use False unless you definitely need it
+      gradient_as_bucket_view: False  # PL default value is False
+    deepspeed_kwargs:
+      # -- deepspeed by Microsoft
+      # --  https://pytorch-lightning.readthedocs.io/en/latest/api/pytorch_lightning.plugins.training_type.DeepSpeedPlugin.html#pytorch_lightning.plugins.training_type.DeepSpeedPlugin
+      stage: 2
+  save_best: False
+  save_epoch_last: True
+
+  clip_gradient_algorithm: norm
+  clip_gradient_value: 1.0
+  num_workers: -1  # all workers (not per-gpu workers) and -1 means all cpu cores
+
+  optimizer:
+    method: adam
+    params:
+      lr: 1e-4
+    lr_schedule:
+      method: cosine
+      params:
+        warmup_steps: 100_000 # in steps
+
+  log_interval: 10  # in steps
+  val_interval: 100  # in epochs
+
+  profiler:
+    method: null      # simple, advanced, pytorch
+
+val:
+  batch_size: 16
+  num_workers: -1  # -1 means "system checks the number of cpu and use it".
+  limit_val_batches: 16
+
+test:
+  batch_size: 16
+  num_workers: -1  # -1 means "system checks the number of cpu and use it".
+  limit_test_batches: 16
